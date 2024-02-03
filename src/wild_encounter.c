@@ -52,14 +52,15 @@ static void FeebasSeedRng(u16 seed);
 static bool8 IsWildLevelAllowedByRepel(u8 level);
 static void ApplyFluteEncounterRateMod(u32 *encRate);
 static void ApplyCleanseTagEncounterRateMod(u32 *encRate);
+#ifdef BUGFIX
+static bool8 TryGetAbilityInfluencedWildMonIndex(const struct WildPokemon *wildMon, u8 type, u8 ability, u8 *monIndex, u32 size);
+#else
 static bool8 TryGetAbilityInfluencedWildMonIndex(const struct WildPokemon *wildMon, u8 type, u8 ability, u8 *monIndex);
+#endif
 static bool8 IsAbilityAllowingEncounter(u8 level);
 
 EWRAM_DATA static u8 sWildEncountersDisabled = 0;
 EWRAM_DATA static u32 sFeebasRngValue = 0;
-EWRAM_DATA u8 gChainFishingStreak = 0;
-EWRAM_DATA static u16 sLastFishingSpecies = 0;
-EWRAM_DATA bool8 gIsFishingEncounter = FALSE;   //same as in dizzyegg's item expansion repo
 
 #include "data/wild_encounters.h"
 
@@ -111,58 +112,58 @@ static u16 GetFeebasFishingSpotId(s16 targetX, s16 targetY, u8 section)
 
 static bool8 CheckFeebas(void)
 {
-    // u8 i;
-    // u16 feebasSpots[NUM_FEEBAS_SPOTS];
-    // s16 x, y;
-    // u8 route119Section = 0;
-    // u16 spotId;
+    u8 i;
+    u16 feebasSpots[NUM_FEEBAS_SPOTS];
+    s16 x, y;
+    u8 route119Section = 0;
+    u16 spotId;
 
-    // if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(ROUTE119)
-    //  && gSaveBlock1Ptr->location.mapNum == MAP_NUM(ROUTE119))
-    // {
-    //     GetXYCoordsOneStepInFrontOfPlayer(&x, &y);
-    //     x -= MAP_OFFSET;
-    //     y -= MAP_OFFSET;
+    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(ROUTE119)
+     && gSaveBlock1Ptr->location.mapNum == MAP_NUM(ROUTE119))
+    {
+        GetXYCoordsOneStepInFrontOfPlayer(&x, &y);
+        x -= MAP_OFFSET;
+        y -= MAP_OFFSET;
 
-    //     // Get which third of the map the player is in
-    //     if (y >= sRoute119WaterTileData[3 * 0 + 0] && y <= sRoute119WaterTileData[3 * 0 + 1])
-    //         route119Section = 0;
-    //     if (y >= sRoute119WaterTileData[3 * 1 + 0] && y <= sRoute119WaterTileData[3 * 1 + 1])
-    //         route119Section = 1;
-    //     if (y >= sRoute119WaterTileData[3 * 2 + 0] && y <= sRoute119WaterTileData[3 * 2 + 1])
-    //         route119Section = 2;
+        // Get which third of the map the player is in
+        if (y >= sRoute119WaterTileData[3 * 0 + 0] && y <= sRoute119WaterTileData[3 * 0 + 1])
+            route119Section = 0;
+        if (y >= sRoute119WaterTileData[3 * 1 + 0] && y <= sRoute119WaterTileData[3 * 1 + 1])
+            route119Section = 1;
+        if (y >= sRoute119WaterTileData[3 * 2 + 0] && y <= sRoute119WaterTileData[3 * 2 + 1])
+            route119Section = 2;
 
-    //     // 50% chance of encountering Feebas (assuming this is a Feebas spot)
-    //     if (Random() % 100 > 49)
-    //         return FALSE;
+        // 50% chance of encountering Feebas (assuming this is a Feebas spot)
+        if (Random() % 100 > 49)
+            return FALSE;
 
-    //     FeebasSeedRng(gSaveBlock1Ptr->dewfordTrends[0].rand);
+        FeebasSeedRng(gSaveBlock1Ptr->dewfordTrends[0].rand);
 
-    //     // Assign each Feebas spot to a random fishing spot.
-    //     // Randomness is fixed depending on the seed above.
-    //     for (i = 0; i != NUM_FEEBAS_SPOTS;)
-    //     {
-    //         feebasSpots[i] = FeebasRandom() % NUM_FISHING_SPOTS;
-    //         if (feebasSpots[i] == 0)
-    //             feebasSpots[i] = NUM_FISHING_SPOTS;
+        // Assign each Feebas spot to a random fishing spot.
+        // Randomness is fixed depending on the seed above.
+        for (i = 0; i != NUM_FEEBAS_SPOTS;)
+        {
+            feebasSpots[i] = FeebasRandom() % NUM_FISHING_SPOTS;
+            if (feebasSpots[i] == 0)
+                feebasSpots[i] = NUM_FISHING_SPOTS;
 
-    //         // < 1 below is a pointless check, it will never be TRUE.
-    //         // >= 4 to skip fishing spots 1-3, because these are inaccessible
-    //         // spots at the top of the map, at (9,7), (7,13), and (15,16).
-    //         // The first accessible fishing spot is spot 4 at (18,18).
-    //         if (feebasSpots[i] < 1 || feebasSpots[i] >= 4)
-    //             i++;
-    //     }
+            // < 1 below is a pointless check, it will never be TRUE.
+            // >= 4 to skip fishing spots 1-3, because these are inaccessible
+            // spots at the top of the map, at (9,7), (7,13), and (15,16).
+            // The first accessible fishing spot is spot 4 at (18,18).
+            if (feebasSpots[i] < 1 || feebasSpots[i] >= 4)
+                i++;
+        }
 
-    //     // Check which fishing spot the player is at, and see if
-    //     // it matches any of the Feebas spots.
-    //     spotId = GetFeebasFishingSpotId(x, y, route119Section);
-    //     for (i = 0; i < NUM_FEEBAS_SPOTS; i++)
-    //     {
-    //         if (spotId == feebasSpots[i])
-    //             return TRUE;
-    //     }
-    // }
+        // Check which fishing spot the player is at, and see if
+        // it matches any of the Feebas spots.
+        spotId = GetFeebasFishingSpotId(x, y, route119Section);
+        for (i = 0; i < NUM_FEEBAS_SPOTS; i++)
+        {
+            if (spotId == feebasSpots[i])
+                return TRUE;
+        }
+    }
     return FALSE;
 }
 
@@ -363,7 +364,7 @@ static u8 PickWildMonNature(void)
             }
         }
     }
-    // check synchronize for a pokemon with the same ability
+    // check synchronize for a Pokémon with the same ability
     if (!GetMonData(&gPlayerParty[0], MON_DATA_SANITY_IS_EGG)
         && GetMonAbility(&gPlayerParty[0]) == ABILITY_SYNCHRONIZE
         && Random() % 2 == 0)
@@ -412,6 +413,11 @@ static void CreateWildMon(u16 species, u8 level)
 
     CreateMonWithNature(&gEnemyParty[0], species, level, USE_RANDOM_IVS, PickWildMonNature());
 }
+#ifdef BUGFIX
+#define TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildPokemon, type, ability, ptr, count) TryGetAbilityInfluencedWildMonIndex(wildPokemon, type, ability, ptr, count)
+#else
+#define TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildPokemon, type, ability, ptr, count) TryGetAbilityInfluencedWildMonIndex(wildPokemon, type, ability, ptr)
+#endif
 
 static bool8 TryGenerateWildMon(const struct WildPokemonInfo *wildMonInfo, u8 area, u8 flags)
 {
@@ -421,15 +427,15 @@ static bool8 TryGenerateWildMon(const struct WildPokemonInfo *wildMonInfo, u8 ar
     switch (area)
     {
     case WILD_AREA_LAND:
-        if (TryGetAbilityInfluencedWildMonIndex(wildMonInfo->wildPokemon, TYPE_STEEL, ABILITY_MAGNET_PULL, &wildMonIndex))
+        if (TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildMonInfo->wildPokemon, TYPE_STEEL, ABILITY_MAGNET_PULL, &wildMonIndex, LAND_WILD_COUNT))
             break;
-        if (TryGetAbilityInfluencedWildMonIndex(wildMonInfo->wildPokemon, TYPE_ELECTRIC, ABILITY_STATIC, &wildMonIndex))
+        if (TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildMonInfo->wildPokemon, TYPE_ELECTRIC, ABILITY_STATIC, &wildMonIndex, LAND_WILD_COUNT))
             break;
 
         wildMonIndex = ChooseWildMonIndex_Land();
         break;
     case WILD_AREA_WATER:
-        if (TryGetAbilityInfluencedWildMonIndex(wildMonInfo->wildPokemon, TYPE_ELECTRIC, ABILITY_STATIC, &wildMonIndex))
+        if (TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildMonInfo->wildPokemon, TYPE_ELECTRIC, ABILITY_STATIC, &wildMonIndex, WATER_WILD_COUNT))
             break;
 
         wildMonIndex = ChooseWildMonIndex_WaterRock();
@@ -775,7 +781,6 @@ void FishingWildEncounter(u8 rod)
 {
     u16 species;
 
-    gIsFishingEncounter = TRUE; //must be set before mon is created
     if (CheckFeebas() == TRUE)
     {
         u8 level = ChooseWildMonLevel(&sWildFeebas);
@@ -787,18 +792,7 @@ void FishingWildEncounter(u8 rod)
     {
         species = GenerateFishingWildMon(gWildMonHeaders[GetCurrentMapWildMonHeaderId()].fishingMonsInfo, rod);
     }
-    
-    if (species == sLastFishingSpecies)
-    {
-        gChainFishingStreak++;
-    }
-    else
-    {
-        gChainFishingStreak = 0;    //reeling in different species resets chain fish counter
-    }
-
-    sLastFishingSpecies = species;
-    IncrementGameStat(GAME_STAT_FISHING_CAPTURES);
+    IncrementGameStat(GAME_STAT_FISHING_ENCOUNTERS);
     SetPokemonAnglerSpecies(species);
     BattleSetup_StartWildBattle();
 }
@@ -818,16 +812,16 @@ u16 GetLocalWildMon(bool8 *isWaterMon)
     // Neither
     if (landMonsInfo == NULL && waterMonsInfo == NULL)
         return SPECIES_NONE;
-    // Land Pokemon
+    // Land Pokémon
     else if (landMonsInfo != NULL && waterMonsInfo == NULL)
         return landMonsInfo->wildPokemon[ChooseWildMonIndex_Land()].species;
-    // Water Pokemon
+    // Water Pokémon
     else if (landMonsInfo == NULL && waterMonsInfo != NULL)
     {
         *isWaterMon = TRUE;
         return waterMonsInfo->wildPokemon[ChooseWildMonIndex_WaterRock()].species;
     }
-    // Either land or water Pokemon
+    // Either land or water Pokémon
     if ((Random() % 100) < 80)
     {
         return landMonsInfo->wildPokemon[ChooseWildMonIndex_Land()].species;
@@ -938,8 +932,11 @@ static bool8 TryGetRandomWildMonIndexByType(const struct WildPokemon *wildMon, u
     *monIndex = validIndexes[Random() % validMonCount];
     return TRUE;
 }
-
+#ifdef BUGFIX
+static bool8 TryGetAbilityInfluencedWildMonIndex(const struct WildPokemon *wildMon, u8 type, u8 ability, u8 *monIndex, u32 size)
+#else
 static bool8 TryGetAbilityInfluencedWildMonIndex(const struct WildPokemon *wildMon, u8 type, u8 ability, u8 *monIndex)
+#endif
 {
     if (GetMonData(&gPlayerParty[0], MON_DATA_SANITY_IS_EGG))
         return FALSE;
@@ -948,7 +945,11 @@ static bool8 TryGetAbilityInfluencedWildMonIndex(const struct WildPokemon *wildM
     else if (Random() % 2 != 0)
         return FALSE;
 
+#ifdef BUGFIX
+    return TryGetRandomWildMonIndexByType(wildMon, type, size, monIndex);
+#else
     return TryGetRandomWildMonIndexByType(wildMon, type, LAND_WILD_COUNT, monIndex);
+#endif
 }
 
 static void ApplyFluteEncounterRateMod(u32 *encRate)
@@ -962,5 +963,5 @@ static void ApplyFluteEncounterRateMod(u32 *encRate)
 static void ApplyCleanseTagEncounterRateMod(u32 *encRate)
 {
     if (GetMonData(&gPlayerParty[0], MON_DATA_HELD_ITEM) == ITEM_CLEANSE_TAG)
-        *encRate = 0;
+        *encRate = *encRate * 2 / 3;
 }

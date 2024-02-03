@@ -36,7 +36,6 @@
 #include "pokemon.h"
 #include "random.h"
 #include "recorded_battle.h"
-#include "reshow_battle_screen.h"
 #include "roamer.h"
 #include "safari_zone.h"
 #include "scanline_effect.h"
@@ -61,7 +60,6 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "cable_club.h"
-#include "wild_encounter.h"
 
 extern const struct BgTemplate gBattleBgTemplates[];
 extern const struct WindowTemplate *const gBattleWindowTemplates[];
@@ -122,11 +120,6 @@ static void HandleEndTurn_MonFled(void);
 static void HandleEndTurn_FinishBattle(void);
 static void SpriteCB_UnusedBattleInit(struct Sprite *sprite);
 static void SpriteCB_UnusedBattleInit_Main(struct Sprite *sprite);
-static void PlayerTryEvolution(void);
-static void BeginLeftEvoluionAfterFade(void);
-static void BeginRightEvoluionAfterFade(void);
-static void WaitForEvolutionThenTryAnother(void);
-static void CB2_SetUpReshowBattleScreenAfterEvolution(void);
 
 EWRAM_DATA u16 gBattle_BG0_X = 0;
 EWRAM_DATA u16 gBattle_BG0_Y = 0;
@@ -152,8 +145,7 @@ EWRAM_DATA u8 gBattleTextBuff3[TEXT_BUFF_ARRAY_COUNT] = {0};
 EWRAM_DATA static u32 sFlickerArray[25] = {0};
 EWRAM_DATA u32 gBattleTypeFlags = 0;
 EWRAM_DATA u8 gBattleTerrain = 0;
-EWRAM_DATA bool8 gPlayerDoesNotWantToEvolveLeft = FALSE;
-EWRAM_DATA bool8 gPlayerDoesNotWantToEvolveRight = FALSE;
+EWRAM_DATA u32 gUnusedFirstBattleVar1 = 0; // Never read
 EWRAM_DATA struct MultiPartnerMenuPokemon gMultiPartnerParty[MULTI_PARTY_SIZE] = {0};
 EWRAM_DATA static struct MultiPartnerMenuPokemon* sMultiPartnerPartyBuffer = NULL;
 EWRAM_DATA u8 *gBattleAnimBgTileBuffer = NULL;
@@ -178,7 +170,7 @@ EWRAM_DATA u16 gChosenMove = 0;
 EWRAM_DATA u16 gCalledMove = 0;
 EWRAM_DATA s32 gBattleMoveDamage = 0;
 EWRAM_DATA s32 gHpDealt = 0;
-EWRAM_DATA s32 gTakenDmg[MAX_BATTLERS_COUNT] = {0};
+EWRAM_DATA s32 gBideDmg[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA u16 gLastUsedItem = 0;
 EWRAM_DATA u8 gLastUsedAbility = 0;
 EWRAM_DATA u8 gBattlerAttacker = 0;
@@ -205,8 +197,8 @@ EWRAM_DATA u16 gChosenMoveByBattler[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA u8 gMoveResultFlags = 0;
 EWRAM_DATA u32 gHitMarker = 0;
 EWRAM_DATA static u8 sUnusedBattlersArray[MAX_BATTLERS_COUNT] = {0};
-EWRAM_DATA u8 gTakenDmgByBattler[MAX_BATTLERS_COUNT] = {0};
-EWRAM_DATA u8 gBattleTerrainBackup = 0;
+EWRAM_DATA u8 gBideTarget[MAX_BATTLERS_COUNT] = {0};
+EWRAM_DATA u8 gUnusedFirstBattleVar2 = 0; // Never read
 EWRAM_DATA u16 gSideStatuses[NUM_BATTLE_SIDES] = {0};
 EWRAM_DATA struct SideTimer gSideTimers[NUM_BATTLE_SIDES] = {0};
 EWRAM_DATA u32 gStatuses3[MAX_BATTLERS_COUNT] = {0};
@@ -617,9 +609,6 @@ void CB2_InitBattle(void)
             SetMainCallback2(CB2_PreInitIngamePlayerPartnerBattle);
         }
         gBattleCommunication[MULTIUSE_STATE] = 0;
-        
-        gPlayerDoesNotWantToEvolveLeft = FALSE;
-        gPlayerDoesNotWantToEvolveRight = FALSE;
     }
     else
     {
@@ -655,19 +644,16 @@ static void CB2_InitBattleInternal(void)
         gBattle_WIN0V = WIN_RANGE(DISPLAY_HEIGHT / 2, DISPLAY_HEIGHT / 2 + 1);
         ScanlineEffect_Clear();
 
-        i = 0;
-        while (i < 80)
+        for (i = 0; i < DISPLAY_HEIGHT / 2; i++)
         {
             gScanlineEffectRegBuffers[0][i] = 0xF0;
             gScanlineEffectRegBuffers[1][i] = 0xF0;
-            i++;
         }
 
-        while (i < 160)
+        for (; i < DISPLAY_HEIGHT; i++)
         {
             gScanlineEffectRegBuffers[0][i] = 0xFF10;
             gScanlineEffectRegBuffers[1][i] = 0xFF10;
-            i++;
         }
 
         ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
@@ -2087,8 +2073,7 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum, bool8 fir
     return gTrainers[trainerNum].partySize;
 }
 
-// Unused
-static void HBlankCB_Battle(void)
+static void UNUSED HBlankCB_Battle(void)
 {
     if (REG_VCOUNT < DISPLAY_HEIGHT && REG_VCOUNT >= 111)
         SetGpuReg(REG_OFFSET_BG0CNT, BGCNT_SCREENBASE(24) | BGCNT_TXT256x512);
@@ -2724,8 +2709,7 @@ void SpriteCallbackDummy_2(struct Sprite *sprite)
 #define sNumFlickers data[3]
 #define sDelay       data[4]
 
-// Unused
-static void SpriteCB_InitFlicker(struct Sprite *sprite)
+static void UNUSED SpriteCB_InitFlicker(struct Sprite *sprite)
 {
     sprite->sNumFlickers = 6;
     sprite->sDelay = 1;
@@ -2880,8 +2864,7 @@ static void SpriteCB_BattleSpriteSlideLeft(struct Sprite *sprite)
     }
 }
 
-// Unused
-static void SetIdleSpriteCallback(struct Sprite *sprite)
+static void UNUSED SetIdleSpriteCallback(struct Sprite *sprite)
 {
     sprite->callback = SpriteCB_Idle;
 }
@@ -3465,14 +3448,14 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
         {
             if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT)
             {
-                /* if (!(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER
+                if (!(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER
                                       | BATTLE_TYPE_FRONTIER
                                       | BATTLE_TYPE_LINK
                                       | BATTLE_TYPE_RECORDED_LINK
-                                      | BATTLE_TYPE_TRAINER_HILL))) */
-                // {
+                                      | BATTLE_TYPE_TRAINER_HILL)))
+                {
                     HandleSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), FLAG_SET_SEEN, gBattleMons[gActiveBattler].personality);
-                // }
+                }
                 BtlController_EmitLoadMonSprite(BUFFER_A);
                 MarkBattlerForControllerExec(gActiveBattler);
                 gBattleResults.lastOpponentSpecies = GetMonData(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_SPECIES, NULL);
@@ -3689,22 +3672,21 @@ static void BattleIntroRecordMonsToDex(void)
     {
         for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
         {
-            if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT /*
+            if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT
              && !(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER
                                       | BATTLE_TYPE_FRONTIER
                                       | BATTLE_TYPE_LINK
                                       | BATTLE_TYPE_RECORDED_LINK
-                                      | BATTLE_TYPE_TRAINER_HILL))*/)
-            // {
+                                      | BATTLE_TYPE_TRAINER_HILL)))
+            {
                 HandleSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), FLAG_SET_SEEN, gBattleMons[gActiveBattler].personality);
-            // }
+            }
         }
         gBattleMainFunc = BattleIntroPrintPlayerSendsOut;
     }
 }
 
-// Unused
-static void BattleIntroSkipRecordMonsToDex(void)
+static void UNUSED BattleIntroSkipRecordMonsToDex(void)
 {
     if (gBattleControllerExecFlags == 0)
         gBattleMainFunc = BattleIntroPrintPlayerSendsOut;
@@ -3807,8 +3789,7 @@ static void BattleIntroPlayer1SendsOutMonAnimation(void)
     gBattleMainFunc = TryDoEventsBeforeFirstTurn;
 }
 
-// Unused
-static void BattleIntroSwitchInPlayerMons(void)
+static void UNUSED BattleIntroSwitchInPlayerMons(void)
 {
     if (gBattleControllerExecFlags == 0)
     {
@@ -3893,7 +3874,7 @@ static void TryDoEventsBeforeFirstTurn(void)
     SpecialStatusesClear();
     *(&gBattleStruct->absentBattlerFlags) = gAbsentBattlerFlags;
     BattlePutTextOnWindow(gText_EmptyString3, B_WIN_MSG);
-    gBattleMainFunc = PlayerTryEvolution;
+    gBattleMainFunc = HandleTurnActionSelectionState;
     ResetSentPokesToOpponentValue();
 
     for (i = 0; i < BATTLE_COMMUNICATION_ENTRIES_COUNT; i++)
@@ -4116,80 +4097,6 @@ enum
     STATE_WAIT_SET_BEFORE_ACTION,
     STATE_SELECTION_SCRIPT_MAY_RUN
 };
-
-#define LEFT_PKMN gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_PLAYER_LEFT)]
-#define RIGHT_PKMN gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_PLAYER_RIGHT)]
-
-static void CB2_SetUpReshowBattleScreenAfterEvolution(void)
-{
-    gBattleTerrain = gBattleTerrainBackup; 
-    SetMainCallback2(ReshowBattleScreenAfterMenu);
-}
-
-#define tSpeciesToEvolveInto data[0]
-#define tBattlerPosition     data[1]
-
-static void Task_BeginBattleEvolutionScene(u8 taskId)
-{
-    if (!gPaletteFade.active)
-    {
-        u8 battlerPosition;
-        u16 SpeciesToEvolveInto;
-        FreeAllWindowBuffers();
-        gCB2_AfterEvolution = CB2_SetUpReshowBattleScreenAfterEvolution;
-        gBattleTerrainBackup = gBattleTerrain; // Store the battle terrain to be reloaded later
-
-        battlerPosition = gTasks[taskId].tBattlerPosition;
-        SpeciesToEvolveInto = gTasks[taskId].tSpeciesToEvolveInto;
-        DestroyTask(taskId);
-        EvolutionScene(&gPlayerParty[battlerPosition], SpeciesToEvolveInto, TRUE, battlerPosition);
-    }
-}
-
-static void PlayerTryEvolution(void)
-{
-    u16 species;
-    u8 taskId; 
-    if (gLeveledUpInBattle & gBitTable[LEFT_PKMN] && !gPlayerDoesNotWantToEvolveLeft)
-    {
-        gLeveledUpInBattle &= ~(gBitTable[LEFT_PKMN]); // Mask the bit
-        species = GetEvolutionTargetSpecies(&gPlayerParty[LEFT_PKMN], EVO_MODE_NORMAL, ITEM_NONE);
-        if (species != SPECIES_NONE)
-        {
-            BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 0x10, RGB_BLACK);
-            gBattleMainFunc = WaitForEvolutionThenTryAnother;
-            taskId = CreateTask(Task_BeginBattleEvolutionScene, 0);
-            gTasks[taskId].tSpeciesToEvolveInto = species;
-            gTasks[taskId].tBattlerPosition = LEFT_PKMN;
-            return;
-        }
-    }
-    if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE && gLeveledUpInBattle & gBitTable[RIGHT_PKMN] && !gPlayerDoesNotWantToEvolveRight)
-    {
-        gLeveledUpInBattle &= ~(gBitTable[RIGHT_PKMN]); // Mask the bit
-        species = GetEvolutionTargetSpecies(&gPlayerParty[RIGHT_PKMN], EVO_MODE_NORMAL, ITEM_NONE);
-        if (species != SPECIES_NONE)
-        {
-            BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 0x10, RGB_BLACK);
-            gBattleMainFunc = WaitForEvolutionThenTryAnother;
-            taskId = CreateTask(Task_BeginBattleEvolutionScene, 0);
-            gTasks[taskId].tSpeciesToEvolveInto = species;
-            gTasks[taskId].tBattlerPosition = RIGHT_PKMN;
-            return;
-        }
-    }
-
-    gBattleMainFunc = HandleTurnActionSelectionState;
-
-}
-
-static void WaitForEvolutionThenTryAnother(void)
-{
-    if (gMain.callback2 == BattleMainCB2 && !gPaletteFade.active)
-    {
-        gBattleMainFunc = PlayerTryEvolution;
-    }
-}
 
 static void HandleTurnActionSelectionState(void)
 {
@@ -4705,6 +4612,14 @@ u8 GetWhoStrikesFirst(u8 battler1, u8 battler2, bool8 ignoreChosenMoves)
         holdEffectParam = ItemId_GetHoldEffectParam(gBattleMons[battler1].item);
     }
 
+    // badge boost
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK | BATTLE_TYPE_FRONTIER))
+        && FlagGet(FLAG_BADGE03_GET)
+        && GetBattlerSide(battler1) == B_SIDE_PLAYER)
+    {
+        speedBattler1 = (speedBattler1 * 110) / 100;
+    }
+
     if (holdEffect == HOLD_EFFECT_MACHO_BRACE)
         speedBattler1 /= 2;
 
@@ -4729,6 +4644,14 @@ u8 GetWhoStrikesFirst(u8 battler1, u8 battler2, bool8 ignoreChosenMoves)
     {
         holdEffect = ItemId_GetHoldEffect(gBattleMons[battler2].item);
         holdEffectParam = ItemId_GetHoldEffectParam(gBattleMons[battler2].item);
+    }
+
+    // badge boost
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK | BATTLE_TYPE_FRONTIER))
+        && FlagGet(FLAG_BADGE03_GET)
+        && GetBattlerSide(battler2) == B_SIDE_PLAYER)
+    {
+        speedBattler2 = (speedBattler2 * 110) / 100;
     }
 
     if (holdEffect == HOLD_EFFECT_MACHO_BRACE)
@@ -5203,7 +5126,6 @@ static void FreeResetData_ReturnToOvOrDoEvolutions(void)
 {
     if (!gPaletteFade.active)
     {
-        gIsFishingEncounter = FALSE;
         ResetSpriteData();
         if (gLeveledUpInBattle == 0 || gBattleOutcome != B_OUTCOME_WON)
         {
