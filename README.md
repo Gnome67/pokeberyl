@@ -1,3 +1,5 @@
+```This is a fork of pokeemerald, for my own personal use. The description provided below is from the original page, and has been left unmodified.```
+
 # Pokémon Emerald
 
 This is a decompilation of Pokémon Emerald.
