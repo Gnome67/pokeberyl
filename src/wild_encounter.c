@@ -57,6 +57,9 @@ static bool8 IsAbilityAllowingEncounter(u8 level);
 
 EWRAM_DATA static u8 sWildEncountersDisabled = 0;
 EWRAM_DATA static u32 sFeebasRngValue = 0;
+EWRAM_DATA u8 gChainFishingStreak = 0;
+EWRAM_DATA static u16 sLastFishingSpecies = 0;
+EWRAM_DATA bool8 gIsFishingEncounter = FALSE;   //same as in dizzyegg's item expansion repo
 
 #include "data/wild_encounters.h"
 
@@ -108,58 +111,58 @@ static u16 GetFeebasFishingSpotId(s16 targetX, s16 targetY, u8 section)
 
 static bool8 CheckFeebas(void)
 {
-    u8 i;
-    u16 feebasSpots[NUM_FEEBAS_SPOTS];
-    s16 x, y;
-    u8 route119Section = 0;
-    u16 spotId;
+    // u8 i;
+    // u16 feebasSpots[NUM_FEEBAS_SPOTS];
+    // s16 x, y;
+    // u8 route119Section = 0;
+    // u16 spotId;
 
-    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(ROUTE119)
-     && gSaveBlock1Ptr->location.mapNum == MAP_NUM(ROUTE119))
-    {
-        GetXYCoordsOneStepInFrontOfPlayer(&x, &y);
-        x -= MAP_OFFSET;
-        y -= MAP_OFFSET;
+    // if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(ROUTE119)
+    //  && gSaveBlock1Ptr->location.mapNum == MAP_NUM(ROUTE119))
+    // {
+    //     GetXYCoordsOneStepInFrontOfPlayer(&x, &y);
+    //     x -= MAP_OFFSET;
+    //     y -= MAP_OFFSET;
 
-        // Get which third of the map the player is in
-        if (y >= sRoute119WaterTileData[3 * 0 + 0] && y <= sRoute119WaterTileData[3 * 0 + 1])
-            route119Section = 0;
-        if (y >= sRoute119WaterTileData[3 * 1 + 0] && y <= sRoute119WaterTileData[3 * 1 + 1])
-            route119Section = 1;
-        if (y >= sRoute119WaterTileData[3 * 2 + 0] && y <= sRoute119WaterTileData[3 * 2 + 1])
-            route119Section = 2;
+    //     // Get which third of the map the player is in
+    //     if (y >= sRoute119WaterTileData[3 * 0 + 0] && y <= sRoute119WaterTileData[3 * 0 + 1])
+    //         route119Section = 0;
+    //     if (y >= sRoute119WaterTileData[3 * 1 + 0] && y <= sRoute119WaterTileData[3 * 1 + 1])
+    //         route119Section = 1;
+    //     if (y >= sRoute119WaterTileData[3 * 2 + 0] && y <= sRoute119WaterTileData[3 * 2 + 1])
+    //         route119Section = 2;
 
-        // 50% chance of encountering Feebas (assuming this is a Feebas spot)
-        if (Random() % 100 > 49)
-            return FALSE;
+    //     // 50% chance of encountering Feebas (assuming this is a Feebas spot)
+    //     if (Random() % 100 > 49)
+    //         return FALSE;
 
-        FeebasSeedRng(gSaveBlock1Ptr->dewfordTrends[0].rand);
+    //     FeebasSeedRng(gSaveBlock1Ptr->dewfordTrends[0].rand);
 
-        // Assign each Feebas spot to a random fishing spot.
-        // Randomness is fixed depending on the seed above.
-        for (i = 0; i != NUM_FEEBAS_SPOTS;)
-        {
-            feebasSpots[i] = FeebasRandom() % NUM_FISHING_SPOTS;
-            if (feebasSpots[i] == 0)
-                feebasSpots[i] = NUM_FISHING_SPOTS;
+    //     // Assign each Feebas spot to a random fishing spot.
+    //     // Randomness is fixed depending on the seed above.
+    //     for (i = 0; i != NUM_FEEBAS_SPOTS;)
+    //     {
+    //         feebasSpots[i] = FeebasRandom() % NUM_FISHING_SPOTS;
+    //         if (feebasSpots[i] == 0)
+    //             feebasSpots[i] = NUM_FISHING_SPOTS;
 
-            // < 1 below is a pointless check, it will never be TRUE.
-            // >= 4 to skip fishing spots 1-3, because these are inaccessible
-            // spots at the top of the map, at (9,7), (7,13), and (15,16).
-            // The first accessible fishing spot is spot 4 at (18,18).
-            if (feebasSpots[i] < 1 || feebasSpots[i] >= 4)
-                i++;
-        }
+    //         // < 1 below is a pointless check, it will never be TRUE.
+    //         // >= 4 to skip fishing spots 1-3, because these are inaccessible
+    //         // spots at the top of the map, at (9,7), (7,13), and (15,16).
+    //         // The first accessible fishing spot is spot 4 at (18,18).
+    //         if (feebasSpots[i] < 1 || feebasSpots[i] >= 4)
+    //             i++;
+    //     }
 
-        // Check which fishing spot the player is at, and see if
-        // it matches any of the Feebas spots.
-        spotId = GetFeebasFishingSpotId(x, y, route119Section);
-        for (i = 0; i < NUM_FEEBAS_SPOTS; i++)
-        {
-            if (spotId == feebasSpots[i])
-                return TRUE;
-        }
-    }
+    //     // Check which fishing spot the player is at, and see if
+    //     // it matches any of the Feebas spots.
+    //     spotId = GetFeebasFishingSpotId(x, y, route119Section);
+    //     for (i = 0; i < NUM_FEEBAS_SPOTS; i++)
+    //     {
+    //         if (spotId == feebasSpots[i])
+    //             return TRUE;
+    //     }
+    // }
     return FALSE;
 }
 
@@ -772,6 +775,7 @@ void FishingWildEncounter(u8 rod)
 {
     u16 species;
 
+    gIsFishingEncounter = TRUE; //must be set before mon is created
     if (CheckFeebas() == TRUE)
     {
         u8 level = ChooseWildMonLevel(&sWildFeebas);
@@ -783,6 +787,17 @@ void FishingWildEncounter(u8 rod)
     {
         species = GenerateFishingWildMon(gWildMonHeaders[GetCurrentMapWildMonHeaderId()].fishingMonsInfo, rod);
     }
+    
+    if (species == sLastFishingSpecies)
+    {
+        gChainFishingStreak++;
+    }
+    else
+    {
+        gChainFishingStreak = 0;    //reeling in different species resets chain fish counter
+    }
+
+    sLastFishingSpecies = species;
     IncrementGameStat(GAME_STAT_FISHING_CAPTURES);
     SetPokemonAnglerSpecies(species);
     BattleSetup_StartWildBattle();
@@ -947,5 +962,5 @@ static void ApplyFluteEncounterRateMod(u32 *encRate)
 static void ApplyCleanseTagEncounterRateMod(u32 *encRate)
 {
     if (GetMonData(&gPlayerParty[0], MON_DATA_HELD_ITEM) == ITEM_CLEANSE_TAG)
-        *encRate = *encRate * 2 / 3;
+        *encRate = 0;
 }

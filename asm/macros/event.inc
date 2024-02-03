@@ -1729,6 +1729,10 @@
 	.2byte \quantity
 	.endm
 
+@ Ceases movement for the event obj. the Player is currently interacting with and that one alone.
+	.macro locktarget
+	.byte 0xe3
+	.endm
 
 @ Supplementary
 
@@ -1923,6 +1927,50 @@
 	setfieldeffectargument 1, \y
 	setfieldeffectargument 2, \priority
 	dofieldeffect FLDEFF_SPARKLE
+	.endm
+
+	@ Calls a script if the Player's Pokedex has seen the specified Pokemon.
+	.macro call_if_mon_seen species:req, script:req
+	setvar VAR_TEMP_1, \species
+	specialvar VAR_RESULT, GetSeenMon
+	compare VAR_RESULT, TRUE
+	call_if TRUE, \script
+	.endm
+
+	@ Calls a script if the Player's Pokedex has recorded the data of the specified Pokemon.
+	.macro call_if_mon_caught species:req, script:req
+	setvar VAR_TEMP_1, \species
+	specialvar VAR_RESULT, GetCaughtMon
+	compare VAR_RESULT, TRUE
+	call_if TRUE, \script
+	.endm
+
+	@ Jumps to a script if the Player's Pokedex has seen the specified Pokemon.
+	.macro goto_if_mon_seen species:req, script:req
+	setvar VAR_TEMP_1, \species
+	specialvar VAR_RESULT, GetSeenMon
+	compare VAR_RESULT, TRUE
+	goto_if TRUE, \script
+	.endm
+
+	@ Jumps to a script if the Player's Pokedex has recorded the data of the specified Pokemon.
+	.macro goto_if_mon_caught species:req, script:req
+	setvar VAR_TEMP_1, \species
+	specialvar VAR_RESULT, GetCaughtMon
+	compare VAR_RESULT, TRUE
+	goto_if TRUE, \script
+	.endm
+
+	@ Sets the Pokédex Seen flag of the specified Pokemon
+	.macro setseenmon species:req
+	setvar VAR_TEMP_1, \species
+	special SetSeenMon
+	.endm
+
+	@ Sets the Pokédex Caught flag of the specified Pokemon
+	.macro setcaughtmon species:req
+	setvar VAR_TEMP_1, \species
+	special SetCaughtMon
 	.endm
 
 	@ Prints a braille message, waits for an A or B press, then closes the message.

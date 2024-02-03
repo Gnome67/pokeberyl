@@ -3,6 +3,9 @@
 
 #include "constants/wild_encounter.h"
 
+extern u8 gChainFishingStreak;
+extern bool8 gIsFishingEncounter;
+
 struct WildPokemon
 {
     u8 minLevel;
