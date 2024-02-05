@@ -646,13 +646,6 @@ static void Task_EvolutionScene(u8 taskId)
     {
         gTasks[taskId].tState = EVOSTATE_CANCEL;
         gTasks[sEvoGraphicsTaskId].tEvoStopped = TRUE;
-        if (gMain.inBattle && gBattleOutcome == 0)
-        {
-            if (gTasks[taskId].tPartyId == LEFT_PKMN) 
-            gPlayerDoesNotWantToEvolveLeft = TRUE; // Stop trying to make the left Pokémon evolve again in battle
-            else if (gTasks[taskId].tPartyId == RIGHT_PKMN) 
-            gPlayerDoesNotWantToEvolveRight = TRUE; // Stop trying to make the right Pokémon evolve again in battle
-        }
         StopBgAnimation();
         return;
     }
@@ -783,10 +776,10 @@ static void Task_EvolutionScene(u8 taskId)
                 // Update BattlePokemon stats if in battle
                 u8 monId = gTasks[taskId].tPartyId;
                 if (monId == LEFT_PKMN) 
-                    CopyPlayerPartyMonToBattleData(0, monId, FALSE);
+                    CopyPlayerPartyMonToBattleData(0, monId);
                 else if (monId == RIGHT_PKMN) 
                 {
-                    CopyPlayerPartyMonToBattleData(2, monId, FALSE);
+                    CopyPlayerPartyMonToBattleData(2, monId);
                 }
             }
         }
